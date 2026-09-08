@@ -12,6 +12,8 @@ const ADMIN_LANGS = {
   // PORTUGUÊS (padrão)
   // ══════════════════════════════════════════════════════════
   pt: {
+    'pdv.lancar_pedido': 'Lançar Pedido',
+
     // ── Sidebar ────────────────────────────────────────────
     'sidebar.visao':        'Visão',
     'sidebar.pdv':          'PDV Balcão',
@@ -25,6 +27,7 @@ const ADMIN_LANGS = {
     'sidebar.turnos':       'Turnos',
     'sidebar.sair':         'Sair',
     'sidebar.facturacion': 'Faturação',
+    'sidebar.na_nota':      'Na Nota',
 
     // ── Dashboard ──────────────────────────────────────────
     'dash.title':           'Painel de Controle',
@@ -41,6 +44,25 @@ const ADMIN_LANGS = {
     'dash.mes':             'Este mês',
     'dash.personalizado':   'Personalizado',
     'dash.nenhuma_venda':   'Nenhuma venda no período',
+
+    'mesas.abrir_comanda': 'Abrir Comanda',
+    'mesas.finalizar': 'Finalizar',
+    'mesas.pendente_singular': 'pendente',
+    'mesas.pendente_plural': 'pendentes',
+    'mesas.total': 'Total',
+    'mesas.status_pendente': 'PENDENTE',
+
+    'mesas.abrir_comanda': 'Abrir Comanda',
+    'mesas.finalizar': 'Finalizar',
+    'mesas.pendente_singular': 'pendente',
+    'mesas.pendente_plural': 'pendentes',
+    'mesas.total': 'Total',
+    'mesas.status_pendente': 'PENDENTE',
+    'mesas.mesa_prefixo': 'Mesa',
+    'mesas.nenhuma': 'Nenhuma mesa ativa no momento.',
+    'mesas.editando_mesa': 'Editando Mesa',
+    'mesas.adicione_itens': 'adicione os NOVOS itens e clique em "Lançar Pedido"',
+    'mesas.outros': 'outros',
 
     // ── Pedidos ────────────────────────────────────────────
     'pedidos.title':        'Pedidos',
@@ -92,7 +114,7 @@ const ADMIN_LANGS = {
     'pdv.mesas_andamento':  'Pedidos em Andamento',
     'pdv.entregar':         'Entregar / Baixar',
     'pdv.na_cozinha':       '🔥 Na Cozinha',
-
+    'pdv.taxa_servico_label': 'Taxa de Serviço',
     // ── Financeiro ─────────────────────────────────────────
     'fin.title':            '💰 Controle Financeiro',
     'fin.faturamento':      'Faturamento',
@@ -105,6 +127,7 @@ const ADMIN_LANGS = {
     'fin.transferencia':    'Transferência',
     'fin.cartao':           'Cartão',
     'fin.dinheiro':         'Dinheiro',
+    'fin.na_nota':          'Na Nota',
     'fin.motoboys':         '🏍️ Relatório Motoboys',
     'fin.filtrar':          'Filtrar',
     'fin.exportar_csv':     '📊 CSV / Power BI',
@@ -312,6 +335,7 @@ const ADMIN_LANGS = {
     'pdv.desconto_label':   '– Desconto',
     'pdv.valor_total':      'Total',
     'pdv.receber_finalizar':'✅ Receber e Finalizar',
+    'pdv.finalizar_pedido': '🏁 Finalizar Pedido',
     'pdv.endereco':         'Endereço',
     'pdv.endereco_ph':      'Rua, nº, bairro...',
     'pdv.link_gmaps':       'Link Google Maps',
@@ -362,6 +386,7 @@ const ADMIN_LANGS = {
     'sidebar.mensalistas':  'Mensalistas',
     'sidebar.motoboys':     'Motoboys',
     'sidebar.produtos':     'Produtos',
+    'sidebar.na_nota':      'Na Nota',
 
     // ── Produtos (chaves faltando) ─────────────────────────────────
     'prod.produtos_title':  'Produtos',
@@ -834,6 +859,25 @@ const ADMIN_LANGS = {
     'dash.personalizado':   'Personalizado',
     'dash.nenhuma_venda':   'Sin ventas en el período',
 
+    'mesas.abrir_comanda': 'Abrir Comanda', // ou 'Abrir Comanda' (mantém)
+    'mesas.finalizar': 'Finalizar',
+    'mesas.pendente_singular': 'pendiente',
+    'mesas.pendente_plural': 'pendientes',
+    'mesas.total': 'Total',
+    'mesas.status_pendente': 'PENDIENTE',
+    'pdv.taxa_servico_label': 'Taja de Servicio',
+    'mesas.abrir_comanda': 'Abrir Comanda',
+    'mesas.finalizar': 'Finalizar',
+    'mesas.pendente_singular': 'pendiente',
+    'mesas.pendente_plural': 'pendientes',
+    'mesas.total': 'Total',
+    'mesas.status_pendente': 'PENDIENTE',
+    'mesas.mesa_prefixo': 'Mesa',
+    'mesas.nenhuma': 'Ninguna mesa activa en este momento.',
+    'mesas.editando_mesa': 'Editando Mesa',
+    'mesas.adicione_itens': 'añada los NUEVOS items y haga clic en "Lanzar Pedido"',
+    'mesas.outros': 'otros',
+
     // ── Pedidos ────────────────────────────────────────────
     'pedidos.title':        'Pedidos',
     'pedidos.cliente':      'Cliente',
@@ -1105,6 +1149,7 @@ const ADMIN_LANGS = {
     'pdv.desconto_label':   '– Descuento',
     'pdv.valor_total':      'Total',
     'pdv.receber_finalizar':'✅ Cobrar y Finalizar',
+    'pdv.finalizar_pedido': '🏁 Finalizar Pedido',
     'pdv.endereco':         'Dirección',
     'pdv.endereco_ph':      'Calle, nº, barrio...',
     'pdv.link_gmaps':       'Link Google Maps',
@@ -1153,8 +1198,9 @@ const ADMIN_LANGS = {
     'sidebar.ficha_tecnica':'Ficha Técnica',
     'sidebar.filiais':      'Sucursales',
     'sidebar.mensalistas':  'Mensualistas',
-    'sidebar.motoboys':     'Repartidores',
+    'sidebar.motoboys':     'Delivery / Repartidores',
     'sidebar.produtos':     'Productos',
+    'sidebar.na_nota':      'Al Fiado',
 
     // ── Produtos (chaves faltando) ─────────────────────────────────
     'prod.produtos_title':  'Productos',
@@ -1567,6 +1613,9 @@ const ADMIN_LANGS = {
     'geral.vence':          'Vence:',
     'geral.vencimento':     'Vencimiento',
     'ft.erro':              'Error: ',
+
+    'pdv.lancar_pedido': 'Lanzar Pedido',
+
 
     // ── Filiais ───────────────────────────────────────────────────
     'filiais.nova_sucursal':     'Nueva Sucursal',
