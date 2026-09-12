@@ -7,6 +7,7 @@ let COTACAO_REAL = 1100;
 let TAXA_DEBITO_BR = 1.99; // populado do banco em verificarHorario()
 let TAXA_CREDITO_BR = 4.98; // populado do banco em verificarHorario()
 let _cartaoBRTipo = "debito"; // toggle débito/crédito no checkout
+let _cartaoPYTipo = "debito"; // idem, para a Tarjeta local (Cartao)
 let NOME_RESTAURANTE_APP = ""; // populado do banco em verificarHorario()
 let autoConfirmTimer = null;
 
@@ -254,6 +255,7 @@ if (typeof supa === "undefined") {
 // 2. ESTADO DA APLICAÇÃO (Variáveis Globais)
 // ==========================================
 let carrinho = [];
+let FEATURES_PAGAMENTOS_CLIENTE = null; // features_ativas.pagamentos (controlado pelo adminMaster)
 let freteCalculado = 0;
 // Marca quando o frete foi resolvido via fallback (GPS falhou, aplicou
 // o mínimo da tabela) — usada na validação do checkout pra não travar
@@ -395,6 +397,7 @@ async function verificarHorario() {
   if (data.limite_distancia_km != null)
     LIMITE_DISTANCIA_KM = parseFloat(data.limite_distancia_km) || null;
   // Aplica visibilidade das formas de pagamento conforme configuração
+  FEATURES_PAGAMENTOS_CLIENTE = data.features_ativas?.pagamentos || null;
   _aplicarFormasPagamentoCliente(data.features_ativas);
   if (data.taxa_debito != null) TAXA_DEBITO_BR = Number(data.taxa_debito);
   if (data.taxa_credito != null) TAXA_CREDITO_BR = Number(data.taxa_credito);
@@ -2888,7 +2891,11 @@ function verificarPagamento() {
       ? _cartaoBRTipo === "debito"
         ? tt({es:"Tarjeta BR - Débito",pt:"Cartão BR - Débito",en:"Card BR - Debit",de:"Karte BR - Debit"})
         : tt({es:"Tarjeta BR - Crédito",pt:"Cartão BR - Crédito",en:"Card BR - Credit",de:"Karte BR - Kredit"})
-      : pag;
+      : pag === "Cartao"
+        ? _cartaoPYTipo === "debito"
+          ? tt({es:"Tarjeta - Débito",pt:"Cartão - Débito",en:"Card - Debit",de:"Karte - Debit"})
+          : tt({es:"Tarjeta - Crédito",pt:"Cartão - Crédito",en:"Card - Credit",de:"Karte - Kredit"})
+        : pag;
   const infoDiv = document.getElementById("info-pagamento-extra");
   const boxTroco = document.getElementById("box-troco");
   const boxMulti = document.getElementById("box-multipagamento");
@@ -2958,6 +2965,61 @@ function verificarPagamento() {
       window._renderCartaoBR();
     };
     _renderCartaoBR();
+  } else if (pag === "Cartao") {
+    infoDiv.style.display = "block";
+
+    const _calcTotalGsPY = () => {
+      const totalItens = carrinho.reduce((a, i) => a + i.preco * i.qtd, 0);
+      let frete = modoEntrega === "delivery" ? Math.max(0, freteCalculado) : 0;
+      let desconto = 0;
+      if (cupomAplicado) {
+        if (cupomAplicado.tipo === "percentual")
+          desconto = Math.round(totalItens * (cupomAplicado.valor / 100));
+        else if (cupomAplicado.tipo === "frete") frete = 0;
+      }
+      return totalItens - desconto + frete;
+    };
+
+    const _renderCartaoPY = () => {
+      const totalGs = _calcTotalGsPY();
+      const taxa = _cartaoPYTipo === "debito" ? TAXA_DEBITO_BR : TAXA_CREDITO_BR;
+      const totalComTaxa =
+        totalGs > 0 ? Math.round(totalGs * (1 + taxa / 100)) : 0;
+      const el = document.getElementById("info-pagamento-extra");
+      if (!el) return;
+      el.style.display = "block";
+      el.innerHTML = `
+        <div style="font-weight:700;margin-bottom:8px;font-size:0.9rem">💳 Tarjeta</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button type="button" onclick="window._setPYTipo('debito')"
+            style="flex:1;padding:9px 6px;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.83rem;
+                   border:2px solid ${_cartaoPYTipo === "debito" ? "#1a7a2e" : "#ccc"};
+                   background:${_cartaoPYTipo === "debito" ? "#eafaf1" : "#f8f9fa"};
+                   color:${_cartaoPYTipo === "debito" ? "#1a7a2e" : "#555"}">
+            💳 Débito<br><small style="font-weight:400">${TAXA_DEBITO_BR.toFixed(2).replace(".", ",")}%</small>
+          </button>
+          <button type="button" onclick="window._setPYTipo('credito')"
+            style="flex:1;padding:9px 6px;border-radius:8px;font-weight:700;cursor:pointer;font-size:0.83rem;
+                   border:2px solid ${_cartaoPYTipo === "credito" ? "#1a7a2e" : "#ccc"};
+                   background:${_cartaoPYTipo === "credito" ? "#eafaf1" : "#f8f9fa"};
+                   color:${_cartaoPYTipo === "credito" ? "#1a7a2e" : "#555"}">
+            💳 Crédito<br><small style="font-weight:400">${TAXA_CREDITO_BR.toFixed(2).replace(".", ",")}%</small>
+          </button>
+        </div>
+        <div style="background:#fff;border:1.5px solid #1a7a2e;border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:0.78rem;color:#666;margin-bottom:2px">Valor a cobrar (con tasa)</div>
+          <div style="font-size:1.3rem;font-weight:900;color:#1a7a2e">
+            ${totalComTaxa === 0 ? '<span style="font-size:0.9rem;color:#999">Adicione itens ao carrinho</span>' : "Gs " + totalComTaxa.toLocaleString("es-PY")}
+          </div>
+        </div>`;
+    };
+
+    window._renderCartaoPY = _renderCartaoPY;
+    window._setPYTipo = (tipo) => {
+      _cartaoPYTipo = tipo;
+      window._renderCartaoPY();
+    };
+    _renderCartaoPY();
   } else if (pag === "Pix") {
     infoDiv.style.display = "block";
     const totalItens = carrinho.reduce((a, i) => a + i.preco * i.qtd, 0);
@@ -3011,7 +3073,7 @@ function verificarPagamento() {
 let _multiContador = 0;
 
 function _getMetodosPag() {
-  return tt({
+  const todos = tt({
     es: [
       { value: "Efetivo", label: "💵 Efectivo" },
       { value: "Cartao", label: "💳 Tarjeta" },
@@ -3045,6 +3107,10 @@ function _getMetodosPag() {
       { value: "QrPy", label: "📱 QR Paraguay" },
     ],
   });
+  // Não deixa escolher, no "Dividir Pagamento", uma forma que o adminMaster
+  // desativou globalmente em Configurações → Controle de Features.
+  if (!FEATURES_PAGAMENTOS_CLIENTE) return todos;
+  return todos.filter((m) => FEATURES_PAGAMENTOS_CLIENTE[m.value] !== false);
 }
 const METODOS_PAG = [
   { value: "Efetivo", label: "💵 Efectivo" },
@@ -3574,13 +3640,17 @@ async function enviarZap() {
     ? document.getElementById("cli-nasc").value
     : null;
 
-  // Resolve o nome final do método de pagamento (CartaoBR tem sub-tipos)
+  // Resolve o nome final do método de pagamento (CartaoBR/Cartao têm sub-tipos)
   const pagFinal =
     pag === "CartaoBR"
       ? _cartaoBRTipo === "debito"
         ? tt({es:"Tarjeta BR - Débito",pt:"Cartão BR - Débito",en:"Card BR - Debit",de:"Karte BR - Debit"})
         : tt({es:"Tarjeta BR - Crédito",pt:"Cartão BR - Crédito",en:"Card BR - Credit",de:"Karte BR - Kredit"})
-      : pag;
+      : pag === "Cartao"
+        ? _cartaoPYTipo === "debito"
+          ? tt({es:"Tarjeta - Débito",pt:"Cartão - Débito",en:"Card - Debit",de:"Karte - Debit"})
+          : tt({es:"Tarjeta - Crédito",pt:"Cartão - Crédito",en:"Card - Credit",de:"Karte - Kredit"})
+        : pag;
 
   if (!nome || !tel || !pag)
     return alert(tt({es:"¡Complete todos los campos obligatorios!",pt:"Preencha todos os campos obrigatórios!",en:"Fill in all required fields!",de:"Füllen Sie alle Pflichtfelder aus!"}));
@@ -3693,11 +3763,47 @@ async function enviarZap() {
   const totalGeral =
     totalItens - desconto + (modoEntrega === "delivery" ? freteAplicado : 0);
 
+  // Taxa de cartão (Cartao / CartaoBR) — a mesma lógica do PDV: se a taxa
+  // configurada for 0%, não soma nada; se houver taxa, soma no total real.
+  let _taxaCartaoValorCli = 0;
+  let _taxaCartaoPctCli = 0;
+  if (pag === "CartaoBR" && (TAXA_DEBITO_BR > 0 || TAXA_CREDITO_BR > 0)) {
+    _taxaCartaoPctCli = _cartaoBRTipo === "debito" ? TAXA_DEBITO_BR : TAXA_CREDITO_BR;
+    _taxaCartaoValorCli = Math.round(totalGeral * (_taxaCartaoPctCli / 100));
+  } else if (pag === "Cartao" && (TAXA_DEBITO_BR > 0 || TAXA_CREDITO_BR > 0)) {
+    _taxaCartaoPctCli = _cartaoPYTipo === "debito" ? TAXA_DEBITO_BR : TAXA_CREDITO_BR;
+    _taxaCartaoValorCli = Math.round(totalGeral * (_taxaCartaoPctCli / 100));
+  }
+  const totalComTaxaCartao = totalGeral + _taxaCartaoValorCli;
+
   // 1. Salva no Banco PRIMEIRO para pegar o ID real
   let pedidoDbId = null;
   let numeroPedido = null;
 
   if (typeof supa !== "undefined") {
+    const _itensComTaxa = carrinho.map((i) => ({
+      n: i.nome,
+      nome: i.nome, // alias legível para admin/motoboy
+      p: i.preco,
+      q: i.qtd,
+      qtd: i.qtd,
+      produto_id: i.produto_id || null,
+      t: i.variacao || "",
+      pr: i.preparo || "",
+      m: i.montagem,
+      o: i.obs,
+      categoria_slug: i.categoria_slug || i.cat || "",
+      es_bebida: i.es_bebida || false,
+    }));
+    if (_taxaCartaoValorCli > 0) {
+      _itensComTaxa.push({
+        n: `Taxa de Cartão (${_taxaCartaoPctCli}%)`,
+        nome: `Taxa de Cartão (${_taxaCartaoPctCli}%)`,
+        p: _taxaCartaoValorCli,
+        q: 1,
+        qtd: 1,
+      });
+    }
     const pedidoDb = {
       status: "pendente",
       tipo_entrega: modoEntrega,
@@ -3705,7 +3811,9 @@ async function enviarZap() {
       frete_cobrado_cliente: modoEntrega === "delivery" ? freteAplicado : 0,
       frete_motoboy: modoEntrega === "delivery" ? freteMotoboy : 0,
       desconto_cupom: desconto,
-      total_geral: totalGeral,
+      total_geral: totalComTaxaCartao,
+      taxa_cartao_percentual: _taxaCartaoValorCli > 0 ? _taxaCartaoPctCli : null,
+      taxa_cartao_valor: _taxaCartaoValorCli,
       forma_pagamento: pagFinal,
       obs_pagamento:
         pag === "Efetivo"
@@ -3713,20 +3821,7 @@ async function enviarZap() {
           : pag === "Multipagamento"
             ? JSON.stringify(_coletarMultiPagamento())
             : "",
-      itens: carrinho.map((i) => ({
-        n: i.nome,
-        nome: i.nome, // alias legível para admin/motoboy
-        p: i.preco,
-        q: i.qtd,
-        qtd: i.qtd, // alias legível
-        produto_id: i.produto_id || null, // ID real — desconto de estoque
-        t: i.variacao || "",
-        pr: i.preparo || "",
-        m: i.montagem,
-        o: i.obs,
-        categoria_slug: i.categoria_slug || i.cat || "", // para filtro de bebidas no motoboy
-        es_bebida: i.es_bebida || false,
-      })),
+      itens: _itensComTaxa,
       endereco_entrega: ref,
       geo_lat: localCliente ? localCliente.lat.toString() : null,
       geo_lng: localCliente ? localCliente.lng.toString() : null,
@@ -3967,7 +4062,10 @@ async function enviarZap() {
   if (modoEntrega === "delivery" && !usouPlanoB) {
     msg += `${_wl.envio}: Gs ${freteAplicado.toLocaleString("es-PY")}\n`;
   }
-  msg += `${_wl.total}: Gs ${totalGeral.toLocaleString("es-PY")}\n`;
+  if (_taxaCartaoValorCli > 0) {
+    msg += `💳 Taxa de Cartão (${_taxaCartaoPctCli}%): +Gs ${_taxaCartaoValorCli.toLocaleString("es-PY")}\n`;
+  }
+  msg += `${_wl.total}: Gs ${totalComTaxaCartao.toLocaleString("es-PY")}\n`;
   msg += `--------------------------\n`;
 
   // Pagamento e Troco
@@ -3991,7 +4089,7 @@ async function enviarZap() {
   if (pag === "Pix" || pag === "Transferencia" || pag === "QrPy") {
     if (pag === "Pix") {
       const totalBrl =
-        COTACAO_REAL > 0 ? (totalGeral / COTACAO_REAL).toFixed(2) : "---";
+        COTACAO_REAL > 0 ? (totalComTaxaCartao / COTACAO_REAL).toFixed(2) : "---";
       msg += `\n💠 ${_wl.pixChave}: ${CHAVE_PIX}\n`;
       msg += `💰 ${_wl.pixValorReais}: R$ ${totalBrl}\n`;
     }
