@@ -12323,14 +12323,8 @@ async function carregarMonitorMesas() {
       imprimirComandaMesa(pedido);
     });
 
-    const btnFinalizar = card.querySelector(".btn-finalizar-mesa");
-    btnFinalizar.addEventListener("click", (e) => {
-      e.stopPropagation();
-      // Abre a comanda desta mesa no PDV: lá o operador escolhe a forma de
-      // pagamento e clica em "Finalizar Pedido" para fechar de fato — antes
-      // esse botão dava baixa direto, sem nunca perguntar a forma de pagamento.
-      abrirMesaExistente(pedido);
-    });
+   // Botão "Finalizar" foi removido — o fechamento de mesa acontece agora
+    // exclusivamente pelo PDV (botão "Fechar Conta e Receber")
 
     grid.appendChild(card);
   });
