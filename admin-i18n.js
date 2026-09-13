@@ -13,6 +13,9 @@ const ADMIN_LANGS = {
   // ══════════════════════════════════════════════════════════
   pt: {
     'pdv.lancar_pedido': 'Lançar Pedido',
+    'pdv.fechar_conta': 'Fechar Conta e Receber',   // pt
+    'pdv.abrir_mesa':   'Abrir Mesa',               // pt
+
 
     // ── Sidebar ────────────────────────────────────────────
     'sidebar.visao':        'Visão',
@@ -830,6 +833,10 @@ const ADMIN_LANGS = {
   // ESPAÑOL (Paraguay)
   // ══════════════════════════════════════════════════════════
   es: {
+
+    'pdv.fechar_conta': 'Cerrar Cuenta y Cobrar',   // es
+    'pdv.abrir_mesa':   'Abrir Mesa',               // es
+    
     // ── Sidebar ────────────────────────────────────────────
     'sidebar.visao':        'Visión',
     'sidebar.pdv':          'PDV Mostrador',

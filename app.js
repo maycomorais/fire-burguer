@@ -177,6 +177,16 @@ async function confirmarEntregaCliente() {
   }
 }
 
+function _precoBordaPorTamanho(borda, tamanho) {
+  if (!borda) return 0;
+  const tamNome = tamanho?.nome;
+  if (borda.precos && tamNome && borda.precos[tamNome] != null) {
+    return borda.precos[tamNome];
+  }
+  // Compat: borda antiga com preço único
+  return borda.preco || 0;
+}
+
 // ===== MOSTRAR MENSAGEM DE CONFIRMAÇÃO =====
 function mostrarMensagemEntregaConfirmada() {
   const tracker = document.getElementById("pedido-tracker");
@@ -1286,43 +1296,41 @@ function _revelarPasso4Borda() {
   if (!p4) return;
 
   // Monta opções de borda
-  const bordasOpcoes =
-    p.bordas && p.bordas.length > 0
-      ? p.bordas
-      : p.tem_borda
-        ? [{ nome: "Borda Recheada", preco: p.borda_preco || 0 }]
-        : [];
+  const bordasOpcoes = p.bordas && p.bordas.length > 0 ? p.bordas : [];
 
-  p4.innerHTML = `<section class="pizza-step">
-    <div class="pizza-step-header">
-      <span class="pizza-step-num">4</span>
-      <span>Borda recheada?</span>
-    </div>
-    <div class="pizza-opt-row">
-      <button type="button" class="pizza-opt-chip selected" id="borda-nao" onclick="_pizzaSelecionarBorda(null)">
-        Sem borda
-      </button>
-      ${bordasOpcoes
-        .map(
-          (b) => `
-        <button type="button" class="pizza-opt-chip" onclick="_pizzaSelecionarBorda('${b.nome.replace(/'/g, "\\'")}', ${b.preco || 0}, this)">
-          🧀 ${b.nome} <span style="font-size:0.75rem;opacity:0.85">+Gs ${(b.preco || 0).toLocaleString("es-PY")}</span>
-        </button>`,
-        )
-        .join("")}
-    </div>
-  </section>`;
+p4.innerHTML = `<section class="pizza-step">
+  <div class="pizza-step-header">
+    <span class="pizza-step-num">4</span>
+    <span>${tt({es:"Borda recheada?",pt:"Borda recheada?",en:"Stuffed crust?",de:"Gefüllter Rand?"})}</span>
+  </div>
+  <div class="pizza-opt-row">
+    <button type="button" class="pizza-opt-chip selected" id="borda-nao"
+      onclick="_pizzaSelecionarBorda(null, null)">
+      ${tt({es:"Sin borde",pt:"Sem borda",en:"No crust",de:"Ohne Rand"})}
+    </button>
+    ${bordasOpcoes.map(b => {
+      const precoAtual = _precoBordaPorTamanho(b, _pizzaConfig.tamanhoSelecionado);
+      return `
+        <button type="button" class="pizza-opt-chip"
+          onclick='_pizzaSelecionarBorda(${JSON.stringify(b)}, this)'>
+          🧀 ${b.nome}
+          ${precoAtual > 0
+            ? `<span style="font-size:0.75rem;opacity:0.85">+Gs ${precoAtual.toLocaleString("es-PY")}</span>`
+            : ""}
+        </button>`;
+    }).join("")}
+  </div>
+</section>`;
   p4.style.display = "block";
   _scrollModalParaElemento(p4);
 }
 
-function _pizzaSelecionarBorda(nome, preco, el) {
-  document
-    .querySelectorAll("#pizza-passo4 .pizza-opt-chip")
-    .forEach((c) => c.classList.remove("selected"));
+function _pizzaSelecionarBorda(bordaObj, el) {
+  document.querySelectorAll("#pizza-passo4 .pizza-opt-chip")
+    .forEach(c => c.classList.remove("selected"));
   if (el) el.classList.add("selected");
   else document.getElementById("borda-nao")?.classList.add("selected");
-  _pizzaConfig.bordaConfig = nome ? { nome, preco } : null;
+  _pizzaConfig.bordaConfig = bordaObj;   // guarda o objeto completo
   _atualizarPrecoPizza();
   _atualizarResumo();
 }
@@ -1351,7 +1359,10 @@ function _atualizarResumo() {
   const n          = _pizzaConfig.numSabores || 1;
   const tam        = _pizzaConfig.tamanhoSelecionado;
   const precoBase  = _calcularBasePizza(tam, saboresOk);
-  const precoBorda = _pizzaConfig.bordaConfig?.preco || 0;
+  const precoBorda = _precoBordaPorTamanho(
+    _pizzaConfig.bordaConfig,
+    _pizzaConfig.tamanhoSelecionado
+  );
 
   const linhasSabores = saboresOk.map((s, i) => {
     const tl   = (s.tipo || "").toLowerCase();
@@ -1652,7 +1663,10 @@ function _atualizarPrecoPizza() {
   const saboresOk = (_pizzaConfig.sabores || []).filter(Boolean);
   const tam       = _pizzaConfig.tamanhoSelecionado;
   const precoBase  = _calcularBasePizza(tam, saboresOk.length ? saboresOk : []) || prodAtual?.preco || 0;
-  const precoBorda = _pizzaConfig.bordaConfig?.preco || 0;
+  const precoBorda = _precoBordaPorTamanho(
+    _pizzaConfig.bordaConfig,
+    _pizzaConfig.tamanhoSelecionado
+  );
   const total = (precoBase + precoBorda + extrasTotal) * qtd;
   document.getElementById("modal-price").innerText =
     `Gs ${total.toLocaleString("es-PY")}`;
@@ -2410,7 +2424,10 @@ function adicionarDoModal() {
     // ─────────────────────────────────────────────────────────────
     const saboresOk = (_pizzaConfig.sabores || []).filter(Boolean);
     const _tam       = _pizzaConfig.tamanhoSelecionado;
-    const precoBorda = _pizzaConfig.bordaConfig?.preco || 0;
+    const precoBorda = _precoBordaPorTamanho(
+      _pizzaConfig.bordaConfig,
+      _pizzaConfig.tamanhoSelecionado
+    );
     precoFinal = _calcularBasePizza(_tam, saboresOk) + precoBorda;
 
     variacao = _pizzaConfig.tamanhoSelecionado?.nome || "";

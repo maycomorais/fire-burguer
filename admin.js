@@ -664,11 +664,9 @@ function showSubTab(subId) {
 // ── Features globais (controladas pelo adminMaster) ────────────
 async function _carregarFeaturesGlobais() {
   const { data } = await supa
-    .from("configuracoes")
-    .select(
-      "features_ativas, nome_restaurante, whatsapp_loja, coord_lat, coord_lng, taxa_motoboy_base, ajuda_combustivel, chave_pix, nome_pix, dados_alias, nome_alias, tabela_frete, cotacao_real"
-    )
-    .maybeSingle();
+  .from("configuracoes")
+  .select("*")
+  .maybeSingle();
   if (!data) return;
   FEATURES_ATIVAS = data.features_ativas || null;
   if (data.nome_restaurante) NOME_RESTAURANTE = data.nome_restaurante;
@@ -1615,7 +1613,7 @@ async function imprimirPedido(id) {
       frete: p.frete_cobrado_cliente,
       total: p.total_geral,
     },
-    pagamento: { metodo: p.forma_pagamento, obs: p.obs_pagamento },
+    pagamento: { metodo: p.forma_pagamento || "—", obs: p.obs_pagamento || ""},
     factura: p.dados_factura,
     data: new Date(p.created_at || Date.now()).toLocaleString("pt-BR"),
   };
@@ -1947,6 +1945,17 @@ async function calcularFinanceiro() {
   const emailAtual = document.getElementById("user-email")?.innerText || "";
 
   await _carregarSessaoCaixa();
+  // Fallback: se nunca foi carregado (ex: usuário nunca abriu Config), busca agora
+  if (typeof TAXA_MOTOBOY !== "number" || TAXA_MOTOBOY === 0 || AJUDA_COMBUSTIVEL === 0) {
+    const { data: _cfgMot } = await supa
+      .from("configuracoes")
+      .select("taxa_motoboy_base, ajuda_combustivel")
+      .maybeSingle();
+    if (_cfgMot) {
+      if (_cfgMot.taxa_motoboy_base != null) TAXA_MOTOBOY = _cfgMot.taxa_motoboy_base;
+      if (_cfgMot.ajuda_combustivel != null) AJUDA_COMBUSTIVEL = _cfgMot.ajuda_combustivel;
+    }
+  }
   const { utcInicio, utcFim } = await _obterPeriodoFinanceiro();
 
   const elInicio = document.getElementById("fin-inicio");
@@ -1965,7 +1974,7 @@ async function calcularFinanceiro() {
 
   let query = supa
     .from("pedidos")
-    .select("*, motoboys(nome)")
+    .select("*")   // sem join — buscamos nomes de motoboy separadamente
     .in("status", ["entregue", "em_preparo", "pronto_entrega", "saiu_entrega"])
     .gte("created_at", utcInicio)
     .lte("created_at", utcFim);
@@ -1981,6 +1990,14 @@ async function calcularFinanceiro() {
 
   const { data: pedidos } = await query;
   let peds = pedidos || [];
+
+  const _mbIds = [...new Set(peds.filter(p => p.motoboy_id).map(p => p.motoboy_id))];
+  const _motoboyNomeMap = {};
+  if (_mbIds.length) {
+    const { data: _mbs } = await supa
+      .from("motoboys").select("id, nome").in("id", _mbIds);
+    (_mbs || []).forEach(m => { _motoboyNomeMap[m.id] = m.nome; });
+  }
 
   if (facturaFiltro === "com_factura")
     peds = peds.filter((p) => p.dados_factura?.ruc || p.dados_factura?.ci);
@@ -2079,7 +2096,9 @@ async function calcularFinanceiro() {
     if (p.tipo_entrega === "delivery") {
       const taxa = safeNum(p.frete_motoboy) || TAXA_MOTOBOY || 0;
       custoEntregas += taxa;
-      const nm = p.motoboys?.nome || "Sem Motoboy";
+      const nm = p.motoboy_id
+      ? (_motoboyNomeMap[p.motoboy_id] || `Motoboy #${p.motoboy_id}`)
+      : "Sem Motoboy";
       if (!motoMap[nm]) motoMap[nm] = { entregas: 0, frete_total: 0 };
       motoMap[nm].entregas++;
       motoMap[nm].frete_total += taxa;
@@ -4237,13 +4256,17 @@ async function salvarProduto() {
         if (nome) tipos_pizza.push({ nome });
       });
 
-      // Bordas (nome + preço único)
+      // Bordas (nome + precos{por tamanho})
       const bordas = [];
       document.querySelectorAll(".pizza-borda-row").forEach((row) => {
         const nome = row.querySelector('[data-f="bnome"]').value.trim();
-        const preco =
-          parseFloat(row.querySelector('[data-f="bpreco"]')?.value) || 0;
-        if (nome) bordas.push({ nome, preco });
+        if (!nome) return;
+        const precos = {};
+        row.querySelectorAll('[data-f="bpreco_tam"]').forEach(inp => {
+          const v = parseFloat(inp.value);
+          if (!isNaN(v) && v > 0) precos[inp.dataset.tam] = v;
+        });
+        bordas.push({ nome, precos });
       });
 
       // Tamanhos com preço dinâmico por tipo
@@ -4813,14 +4836,14 @@ async function abrirModalProduto(produto = null, tipoInicial = null) {
           addPizzaTipo("Tradicional");
         }
         // Bordas (novo: nome+preco; antigo: nome+tipo)
-        const bordas = (pizzaCfg.bordas || []).map((b) => ({
+        const bordas = (pizzaCfg.bordas || []).map(b => ({
           nome: b.nome,
-          preco: b.preco ?? pizzaCfg.borda_preco ?? 0,
+          precos: b.precos || (b.preco ? { __legacy: b.preco } : {}),
         }));
         document.getElementById("pizza-tem-borda").checked = bordas.length > 0;
         document.getElementById("pizza-bordas-lista").innerHTML = "";
         toggleBordaPreco();
-        bordas.forEach((b) => addPizzaBorda(b));
+        bordas.forEach(b => addPizzaBorda(b));
         // Tamanhos
         (pizzaCfg.tamanhos || []).forEach((t) => addPizzaTamanho(t));
         // Sabores
@@ -5210,22 +5233,74 @@ function _pizzaRefreshTamanhoPrecos() {
 
 function addPizzaBorda(dados = {}) {
   const lista = document.getElementById("pizza-bordas-lista");
+  if (!lista) return;
+
+  // Tamanhos atualmente definidos na lista
+  const tamanhos = [...document.querySelectorAll(".pizza-tamanho-row")]
+    .map(r => r.querySelector('[data-f="nome"]')?.value?.trim())
+    .filter(Boolean);
+
+  // Compat: se veio do formato antigo {preco}, replica para todos
+  const precos = { ...(dados.precos || {}) };
+  if (dados.preco && !dados.precos) {
+    tamanhos.forEach(t => precos[t] = dados.preco);
+  }
+
   const row = document.createElement("div");
   row.className = "pizza-borda-row";
-  row.style.cssText =
-    "display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:6px";
+  row.style.cssText = "background:#fff;border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px";
+
   row.innerHTML = `
-    <div style="flex:3">
-      <label style="font-size:0.72rem;color:#888">Nome da borda</label>
-      <input data-f="bnome" class="form-control" value="${dados.nome || ""}" placeholder="Ex: Cheddar, Catupiry, Chocolate">
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px">
+      <div style="flex:1">
+        <label style="font-size:0.72rem;color:#888">Nome da borda</label>
+        <input data-f="bnome" class="form-control" value="${dados.nome || ""}"
+          placeholder="Ex: Cheddar, Catupiry, Chocolate">
+      </div>
+      <button type="button" class="btn btn-sm btn-danger"
+        onclick="this.closest('.pizza-borda-row').remove()"
+        style="margin-bottom:2px">✕</button>
     </div>
-    <div style="flex:2">
-      <label style="font-size:0.72rem;color:#888">Precio (Gs)</label>
-      <input data-f="bpreco" type="number" class="form-control" value="${dados.preco || ""}" placeholder="0" min="0" step="500">
+    <div style="font-size:0.72rem;color:#888;font-weight:600;margin-bottom:6px">
+      💰 Preço por tamanho (Gs)
     </div>
-    <button class="btn btn-sm btn-danger" onclick="this.closest('.pizza-borda-row').remove()" style="align-self:flex-end;margin-bottom:2px">✕</button>
-  `;
+    <div class="pizza-borda-precos-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px">
+      ${tamanhos.length === 0
+        ? '<div style="color:#c0392b;font-size:0.75rem;grid-column:1/-1">⚠️ Adicione tamanhos acima primeiro</div>'
+        : tamanhos.map(t => `
+          <div>
+            <label style="font-size:0.7rem;color:#666">${t}</label>
+            <input data-f="bpreco_tam" data-tam="${t}" type="number"
+              class="form-control" value="${precos[t] ?? ""}"
+              placeholder="0" min="0" step="500">
+          </div>`).join("")}
+    </div>`;
   lista.appendChild(row);
+}
+
+// Chamar quando o nome de um tamanho mudar, para atualizar as colunas de preço
+function _pizzaRefreshBordaTamanhos() {
+  const tamanhos = [...document.querySelectorAll(".pizza-tamanho-row")]
+    .map(r => r.querySelector('[data-f="nome"]')?.value?.trim())
+    .filter(Boolean);
+
+  document.querySelectorAll(".pizza-borda-row").forEach(row => {
+    const precos = {};
+    row.querySelectorAll('[data-f="bpreco_tam"]').forEach(inp => {
+      precos[inp.dataset.tam] = inp.value;
+    });
+    const grid = row.querySelector(".pizza-borda-precos-grid");
+    if (!grid) return;
+    grid.innerHTML = tamanhos.length === 0
+      ? '<div style="color:#c0392b;font-size:0.75rem;grid-column:1/-1">⚠️ Adicione tamanhos acima primeiro</div>'
+      : tamanhos.map(t => `
+          <div>
+            <label style="font-size:0.7rem;color:#666">${t}</label>
+            <input data-f="bpreco_tam" data-tam="${t}" type="number"
+              class="form-control" value="${precos[t] ?? ""}"
+              placeholder="0" min="0" step="500">
+          </div>`).join("");
+  });
 }
 
 function addPizzaTamanho(dados = {}) {
@@ -9322,13 +9397,25 @@ function _mostrarModalOpcoesPDV(produto, tipo) {
       }
 
       const bordaVal = modal.querySelector('input[name="_pdv_pizza_borda"]:checked')?.value || "";
-      const bordaPreco = bordaVal
-        ? cfg.bordas?.find(b => b.nome === bordaVal)?.preco || 0
+      const tamNome = tam?.nome;
+      const bordaObj = cfg.bordas?.find(b => b.nome === bordaVal);
+      const bordaPreco = bordaObj
+        ? (bordaObj.precos?.[tamNome] ?? bordaObj.preco ?? 0)
         : 0;
 
       const el = modal.querySelector("#_pdv_pizza_preco_val");
       if (el) el.textContent = "Gs " + (precoBase + bordaPreco).toLocaleString("es-PY");
     };
+
+    // dentro de _pdvPizzaAtualizarPreco, após calcular tam:
+    modal.querySelectorAll('#_pdv_pizza_borda_grid label').forEach(lbl => {
+      const radio = lbl.querySelector('input[name="_pdv_pizza_borda"]');
+      if (!radio || !radio.value) return;  // "Sem borda"
+      const bObj = cfg.bordas?.find(b => b.nome === radio.value);
+      const preco = bObj?.precos?.[tam.nome] ?? bObj?.preco ?? 0;
+      const span = lbl.querySelector('.borda-preco-lbl');
+      if (span) span.textContent = preco > 0 ? `+Gs ${preco.toLocaleString("es-PY")}` : "";
+    });
 
     // Compatibilidade — mantém função de filtro mas delegando para update de preço
     window._pdvPizzaFiltrarSabores = function () {
@@ -12215,9 +12302,6 @@ async function carregarMonitorMesas() {
         <button class="btn btn-secondary btn-sm btn-imprimir-comanda" type="button" title="Imprimir Comanda">
           <i class="fas fa-print"></i> <span data-i18n="mesas.imprimir_comanda">Imprimir</span>
         </button>
-        <button class="btn btn-success btn-sm btn-finalizar-mesa" type="button">
-          <i class="fas fa-check-circle"></i> ${t('mesas.finalizar')}
-        </button>
       </div>
     `;
 
@@ -15033,22 +15117,23 @@ async function salvarEdicaoPedidoRelatorio() {
 function atualizarTextoBotaoPDV() {
   const btnText = document.getElementById('pdv-btn-text');
   const btnFinalizarMesa = document.getElementById('pdv-btn-finalizar-mesa');
+  const btnLancar = document.getElementById('pdv-btn-lancar');
   const mesaVal = document.getElementById('balcao-mesa')?.value.trim() || '';
 
   if (window._mesaAbertaId) {
-    // Mesa já existente sendo editada: pode lançar itens novos OU finalizar
-    // (fechar a mesa de vez, escolhendo a forma de pagamento).
-    if (btnText) btnText.textContent = t('pdv.lancar_pedido', 'Lançar Pedido');
+    // Mesa aberta: esconde "Receber e Finalizar" e mostra os 2 botões da mesa
+    if (btnText) btnText.textContent = '📤 Enviar p/ Cozinha';
+    if (btnLancar) btnLancar.style.background = 'linear-gradient(135deg,#2980b9,#1a6e8a)';
     if (btnFinalizarMesa) btnFinalizarMesa.style.display = '';
   } else if (mesaVal) {
-    // Número de mesa preenchido mas o pedido ainda nem existe no banco:
-    // é a abertura da mesa, então só envia para a cozinha — nada de
-    // "Finalizar a venda" aqui, pois ainda não é hora de cobrar.
-    if (btnText) btnText.textContent = t('pdv.lancar_pedido', 'Lançar Pedido');
+    // Vai ABRIR uma mesa nova: só "Lançar Pedido" (envia 1ª rodada)
+    if (btnText) btnText.textContent = t('pdv.abrir_mesa', 'Abrir Mesa');
+    if (btnLancar) btnLancar.style.background = '';
     if (btnFinalizarMesa) btnFinalizarMesa.style.display = 'none';
   } else {
-    // Venda avulta de balcão/retirada/delivery: fluxo de sempre.
+    // Balcão/delivery/retirada padrão
     if (btnText) btnText.textContent = t('pdv.receber_finalizar', 'Receber e Finalizar');
+    if (btnLancar) btnLancar.style.background = '';
     if (btnFinalizarMesa) btnFinalizarMesa.style.display = 'none';
   }
 }
